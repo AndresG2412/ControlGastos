@@ -110,7 +110,7 @@ export default function Navbar() {
 
                             <Link 
                                 className='uppercase text-white font-bold text-3xl tracking-widest group-hover:text-blue-400 group-hover:duration-300 transition-colors duration-300' 
-                                href="/home"
+                                href="/resolver"
                                 onClick={closeMenu}
                             >
                                 Gastos

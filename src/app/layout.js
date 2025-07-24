@@ -16,15 +16,12 @@ export const metadata = {
   description: "App exclusiva para el control de gastos personales",
 };
 
-import Navbar from "./Components/Navbar";
-
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Navbar />
         {children}
       </body>
     </html>

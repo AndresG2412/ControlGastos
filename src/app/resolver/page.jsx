@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react"; // Agregamos useCallback
 import Navbar from "../components/Navbar";
-// Importa addDoc para añadir documentos y doc para construir referencias de documentos
-import { db, collection, getDocs, doc, setDoc } from "../../libs/firebase"; 
-// Importa FieldValue para operaciones atómicas como incrementar, si decides usarlas más adelante
-// import { FieldValue } from "firebase/firestore";
+import { db, collection, getDocs, doc, setDoc, getDoc } from "../../libs/firebase"; // Importamos getDoc
 
 export default function Page() {
     const [vehiculos, setVehiculos] = useState([]);
     const [selectedVehiculoId, setSelectedVehiculoId] = useState("");
-    const [gananciaBrutaDiaria, setGananciaBrutaDiaria] = useState(""); // Renombré para mayor claridad
-    const [gastoGasolina, setGastoGasolina] = useState("");
+    const [gananciaBrutaDiariaInput, setGananciaBrutaDiariaInput] = useState(""); // Input para la nueva ganancia
+    const [gastoGasolinaInput, setGastoGasolinaInput] = useState(""); // Input para el nuevo gasto de gasolina
     const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
 
-    // Estado para los gastos adicionales: solo 'nombre' y 'cantidad'
-    const [gastosAdicionales, setGastosAdicionales] = useState([
-        { nombre: "", cantidad: "" } // Un gasto adicional inicial vacío
+    // Estados para los valores ACUMULADOS del día (lo que ya está en Firestore)
+    const [currentGananciaBruta, setCurrentGananciaBruta] = useState(0);
+    const [currentGastoGasolina, setCurrentGastoGasolina] = useState(0);
+    const [currentGastosAdicionales, setCurrentGastosAdicionales] = useState([]);
+
+    // Estado para los NUEVOS gastos adicionales que se van a añadir en esta sesión
+    const [nuevosGastosAdicionales, setNuevosGastosAdicionales] = useState([
+        { nombre: "", cantidad: "" } // Un gasto adicional inicial vacío para nuevas entradas
     ]);
 
     // ** 1. Obtener los vehículos del usuario **
@@ -38,72 +40,14 @@ export default function Page() {
         obtenerVehiculos();
     }, []);
 
-    // ** 2. Función para añadir un nuevo campo de gasto adicional **
-    const addGastoAdicionalField = () => {
-        setGastosAdicionales([...gastosAdicionales, { nombre: "", cantidad: "" }]);
-    };
-
-    // ** 3. Función para eliminar un campo de gasto adicional **
-    const removeGastoAdicionalField = (indexToRemove) => {
-        setGastosAdicionales(gastosAdicionales.filter((_, index) => index !== indexToRemove));
-    };
-
-    // ** 4. Función para manejar cambios en los campos de gastos adicionales **
-    const handleGastoAdicionalChange = (index, event) => {
-        const { name, value } = event.target;
-        const list = [...gastosAdicionales];
-        list[index][name] = value; // 'name' será 'nombre' o 'cantidad'
-        setGastosAdicionales(list);
-    };
-
-    // ** 5. Función para manejar el envío del formulario **
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        if (!selectedVehiculoId) {
-            alert("Por favor, selecciona un vehículo.");
+    // ** 2. Función para cargar los datos del día seleccionado **
+    const cargarDatosDelDia = useCallback(async () => {
+        if (!selectedVehiculoId || !fecha) {
+            setCurrentGananciaBruta(0);
+            setCurrentGastoGasolina(0);
+            setCurrentGastosAdicionales([]);
             return;
         }
-
-        const gananciaBruta = parseFloat(gananciaBrutaDiaria || 0);
-        const gastoCombustible = parseFloat(gastoGasolina || 0);
-
-        // Validar que la ganancia bruta y el gasto de gasolina sean números válidos
-        if (isNaN(gananciaBruta) || isNaN(gastoCombustible)) {
-            alert("Por favor, ingresa valores numéricos válidos para Ganancia Diaria y Gasto de Gasolina.");
-            return;
-        }
-
-        // Filtra los gastos adicionales que tienen datos válidos y los convierte a un formato numérico
-        let totalGastosAdicionales = 0;
-        const gastosAdicionalesValidos = gastosAdicionales.filter(gasto => 
-            gasto.cantidad && parseFloat(gasto.cantidad) > 0 && gasto.nombre // Aseguramos que haya nombre y cantidad
-        ).map(gasto => {
-            const cantidadNum = parseFloat(gasto.cantidad);
-            totalGastosAdicionales += cantidadNum; // Suma al total de gastos adicionales
-            return {
-                nombre: gasto.nombre,
-                cantidad: cantidadNum,
-                hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) // Hora actual para referencia
-            };
-        });
-
-        // Calcula la ganancia neta restando la gasolina y los gastos adicionales
-        const gananciaNetaCalculada = gananciaBruta - gastoCombustible - totalGastosAdicionales;
-
-        // Datos del registro diario
-        const registroDiario = {
-            gananciaBrutaDiaria: gananciaBruta,
-            gastoGasolina: gastoCombustible,
-            // Puedes mantener descripcionGastoPrincipal si aún quieres una descripción para la gasolina
-            // o eliminarla si no es necesaria. La quitaré para simplificar según tu request.
-            // descripcionGastoPrincipal: descripcionGastoPrincipal, 
-            gastosAdicionales: gastosAdicionalesValidos,
-            totalGastosAdicionales: totalGastosAdicionales, // Guardamos el total sumado de los gastos adicionales
-            gananciaNeta: gananciaNetaCalculada,
-            fecha: fecha,
-            timestampRegistro: new Date()
-        };
 
         try {
             const registroRef = doc(db, 
@@ -114,31 +58,143 @@ export default function Page() {
                 "registros", 
                 fecha 
             );
+            const docSnap = await getDoc(registroRef);
 
-            await setDoc(registroRef, registroDiario, { merge: true }); 
-            
-            alert("Gasto diario registrado con éxito!");
-            // Limpiar el formulario
-            setGananciaBrutaDiaria("");
-            setGastoGasolina("");
-            setGastosAdicionales([{ nombre: "", cantidad: "" }]); // Reinicia a un campo vacío
-            // setFecha(new Date().toISOString().split('T')[0]); // Opcional: resetear la fecha
-            
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setCurrentGananciaBruta(data.gananciaBrutaDiaria || 0);
+                setCurrentGastoGasolina(data.gastoGasolina || 0);
+                setCurrentGastosAdicionales(data.gastosAdicionales || []);
+            } else {
+                // Si no hay datos para el día, inicializa a 0
+                setCurrentGananciaBruta(0);
+                setCurrentGastoGasolina(0);
+                setCurrentGastosAdicionales([]);
+            }
         } catch (error) {
-            console.error("Error al registrar el gasto:", error);
-            alert("Error al registrar el gasto. Por favor, intenta de nuevo.");
+            console.error("Error al cargar los datos del día:", error);
+            alert("Error al cargar los datos del día. Por favor, intenta de nuevo.");
+            setCurrentGananciaBruta(0);
+            setCurrentGastoGasolina(0);
+            setCurrentGastosAdicionales([]);
+        }
+    }, [selectedVehiculoId, fecha]);
+
+    // Cargar datos cuando cambie el vehículo o la fecha
+    useEffect(() => {
+        cargarDatosDelDia();
+    }, [selectedVehiculoId, fecha, cargarDatosDelDia]);
+
+    // ** 3. Función para añadir un nuevo campo de gasto adicional (para esta sesión) **
+    const addNuevoGastoAdicionalField = () => {
+        setNuevosGastosAdicionales([...nuevosGastosAdicionales, { nombre: "", cantidad: "" }]);
+    };
+
+    // ** 4. Función para eliminar un campo de gasto adicional (de los nuevos a añadir) **
+    const removeNuevoGastoAdicionalField = (indexToRemove) => {
+        setNuevosGastosAdicionales(nuevosGastosAdicionales.filter((_, index) => index !== indexToRemove));
+    };
+
+    // ** 5. Función para manejar cambios en los campos de los nuevos gastos adicionales **
+    const handleNuevoGastoAdicionalChange = (index, event) => {
+        const { name, value } = event.target;
+        const list = [...nuevosGastosAdicionales];
+        list[index][name] = value;
+        setNuevosGastosAdicionales(list);
+    };
+
+    // ** 6. Función para manejar el envío del formulario **
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!selectedVehiculoId) {
+            alert("Por favor, selecciona un vehículo.");
+            return;
+        }
+
+        const nuevaGananciaBruta = parseFloat(gananciaBrutaDiariaInput || 0);
+        const nuevoGastoCombustible = parseFloat(gastoGasolinaInput || 0);
+
+        if (isNaN(nuevaGananciaBruta) || isNaN(nuevoGastoCombustible)) {
+            alert("Por favor, ingresa valores numéricos válidos para Ganancia Diaria y Gasto de Gasolina.");
+            return;
+        }
+
+        // Obtener los datos actuales del día antes de actualizar (por si acaso han cambiado desde la carga inicial)
+        const registroRef = doc(db, 
+            "Usuarios", 
+            "3157870130", 
+            "Vehiculos", 
+            selectedVehiculoId, 
+            "registros", 
+            fecha 
+        );
+        const docSnap = await getDoc(registroRef);
+        let datosExistentes = docSnap.exists() ? docSnap.data() : {
+            gananciaBrutaDiaria: 0,
+            gastoGasolina: 0,
+            gastosAdicionales: []
+        };
+
+        // Suma los nuevos valores a los existentes
+        const totalGananciaBruta = datosExistentes.gananciaBrutaDiaria + nuevaGananciaBruta;
+        const totalGastoGasolina = datosExistentes.gastoGasolina + nuevoGastoCombustible;
+
+        // Filtra y añade los nuevos gastos adicionales válidos a la lista existente
+        const nuevosGastosValidos = nuevosGastosAdicionales.filter(gasto => 
+            gasto.cantidad && parseFloat(gasto.cantidad) > 0 && gasto.nombre 
+        ).map(gasto => ({
+            nombre: gasto.nombre,
+            cantidad: parseFloat(gasto.cantidad),
+            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        }));
+        
+        const todosLosGastosAdicionales = [...datosExistentes.gastosAdicionales, ...nuevosGastosValidos];
+
+        // Recalcular el total de gastos adicionales a partir de la lista completa
+        const totalGastosAdicionales = todosLosGastosAdicionales.reduce((sum, gasto) => sum + gasto.cantidad, 0);
+
+        // Calcula la ganancia neta con los totales acumulados
+        const gananciaNetaCalculada = totalGananciaBruta - totalGastoGasolina - totalGastosAdicionales;
+
+        const registroDiarioActualizado = {
+            gananciaBrutaDiaria: totalGananciaBruta,
+            gastoGasolina: totalGastoGasolina,
+            gastosAdicionales: todosLosGastosAdicionales,
+            totalGastosAdicionales: totalGastosAdicionales,
+            gananciaNeta: gananciaNetaCalculada,
+            fecha: fecha,
+            timestampRegistro: new Date() // Actualiza el timestamp del último registro
+        };
+
+        try {
+            await setDoc(registroRef, registroDiarioActualizado, { merge: false }); // merge: false para sobreescribir con los nuevos totales
+                                                                                     // Si usáramos merge:true, tendríamos que ser muy cuidadosos con los arrays
+                                                                                     // y los incrementos atómicos para los números.
+                                                                                     // Es más seguro recalcular y sobreescribir el documento completo del día.
+            
+            alert("Registro diario actualizado con éxito!");
+            // Limpiar los campos de entrada y recargar los datos actuales
+            setGananciaBrutaDiariaInput("");
+            setGastoGasolinaInput("");
+            setNuevosGastosAdicionales([{ nombre: "", cantidad: "" }]); // Reinicia un campo vacío para nuevos gastos
+            cargarDatosDelDia(); // Recarga los datos para que el usuario vea los nuevos totales
+
+        } catch (error) {
+            console.error("Error al registrar/actualizar el gasto:", error);
+            alert("Error al registrar/actualizar el gasto. Por favor, intenta de nuevo.");
         }
     };
 
     return (
         <div className='mt-24'>
             <Navbar />
-            <form onSubmit={handleSubmit} className="w-10/12 gap-y-6 md:w-3/4 mx-auto flex flex-col items-center justify-center h-screen">
-                <p className="text-3xl font-bold tracking-wider">Ingresar Gastos Diarios</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 items-center justify-center bg-white/5 py-10 px-6 mx-auto w-full rounded-lg"> {/* Añadí padding en x */}
-
+            <form onSubmit={handleSubmit} className="w-10/12 gap-y-6 md:w-3/4 mx-auto flex flex-col items-center justify-center min-h-screen py-10">
+                <p className="text-3xl font-bold tracking-wider mb-8">Ingresar/Actualizar Gastos Diarios</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 items-center justify-center bg-white/5 py-10 px-6 mx-auto w-full rounded-lg">
                     {/* Selector de Vehículo */}
-                    <div className="flex flex-col gap-2 w-full px-4"> {/* Añadí px */}
+                    <div className="flex flex-col gap-2 w-full px-4">
                         <label htmlFor="Carro" className="font-semibold tracking-wide text-xl">Selecciona el Vehículo:</label>
                         <select 
                             id="Carro" 
@@ -158,8 +214,8 @@ export default function Page() {
                     </div>
 
                     {/* Campo de Fecha */}
-                    <div className="flex flex-col gap-2 w-full px-4"> {/* Añadí px */}
-                        <label htmlFor="Fecha" className="font-semibold tracking-wide text-xl">Fecha: Hoy</label>
+                    <div className="flex flex-col gap-2 w-full px-4">
+                        <label htmlFor="Fecha" className="font-semibold tracking-wide text-xl">Fecha:</label>
                         <input
                             id="Fecha"
                             value={fecha}
@@ -171,43 +227,53 @@ export default function Page() {
                             required
                         />
                     </div>
+                </div>
 
-                    {/* Ganancia Diaria */}
-                    <div className="flex flex-col gap-2 w-full px-4"> {/* Añadí px */}
-                        <label htmlFor="Ganancia" className="font-semibold tracking-wide text-xl">Ganancia Diaria (Bruta):</label>
+                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
+                    <p className="text-2xl font-bold tracking-wider mb-4 text-center">Resumen del Día ({fecha})</p>
+                    <p className="text-xl text-white/80 mb-2">Ganancia Bruta Acumulada: **${currentGananciaBruta.toLocaleString('es-CO')}**</p>
+                    <p className="text-xl text-white/80 mb-2">Gasto Gasolina Acumulado: **${currentGastoGasolina.toLocaleString('es-CO')}**</p>
+                    <p className="text-xl text-white/80 mb-2">Total Gastos Adicionales: **${currentGastosAdicionales.reduce((sum, g) => sum + g.cantidad, 0).toLocaleString('es-CO')}**</p>
+                    <p className="text-2xl font-bold text-green-400 mt-4">Ganancia Neta Actual: **${(currentGananciaBruta - currentGastoGasolina - currentGastosAdicionales.reduce((sum, g) => sum + g.cantidad, 0)).toLocaleString('es-CO')}**</p>
+                </div>
+                
+                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
+                    <p className="text-2xl font-bold tracking-wider mb-4 text-center">Nuevos Ingresos/Gastos para Añadir</p>
+
+                    {/* Nueva Ganancia Diaria */}
+                    <div className="flex flex-col gap-2 w-full px-4 mb-5">
+                        <label htmlFor="Ganancia" className="font-semibold tracking-wide text-xl">Añadir Ganancia Bruta:</label>
                         <input 
                             id="Ganancia" 
                             autoComplete="off" 
                             className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full" 
                             type="number" 
-                            placeholder="Ej: 150.000" 
-                            required 
-                            value={gananciaBrutaDiaria}
-                            onChange={(e) => setGananciaBrutaDiaria(e.target.value)}
+                            placeholder="Ej: 50.000 (se sumará al total)" 
+                            value={gananciaBrutaDiariaInput}
+                            onChange={(e) => setGananciaBrutaDiariaInput(e.target.value)}
                         />
                     </div>
 
-                    {/* Gasto de Gasolina Diaria */}
-                    <div className="flex flex-col gap-2 w-full px-4"> {/* Añadí px */}
-                        <label htmlFor="Gasolina" className="font-semibold tracking-wide text-xl">Gasto de Gasolina:</label>
+                    {/* Nuevo Gasto de Gasolina Diaria */}
+                    <div className="flex flex-col gap-2 w-full px-4 mb-5">
+                        <label htmlFor="Gasolina" className="font-semibold tracking-wide text-xl">Añadir Gasto de Gasolina:</label>
                         <input 
                             id="Gasolina" 
                             autoComplete="off" 
                             className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full" 
                             type="number" 
-                            placeholder="Ej: 30.000" 
-                            required 
-                            value={gastoGasolina}
-                            onChange={(e) => setGastoGasolina(e.target.value)}
+                            placeholder="Ej: 10.000 (se sumará al total)" 
+                            value={gastoGasolinaInput}
+                            onChange={(e) => setGastoGasolinaInput(e.target.value)}
                         />
                     </div>
                 </div>
                     
-                {/* --- Gastos Adicionales --- */}
-                <div className="w-full mx-auto border-t-2 border-white/20 pt-5 mt-5 px-6"> {/* Añadí px */}
-                    <p className="text-2xl font-bold tracking-wider mb-2 text-center">Gastos Adicionales del Día</p>
-                    <p className="text-md text-center text-white/70 mb-4">(Estos gastos se restarán de la Ganancia Bruta del día)</p>
-                    {gastosAdicionales.map((gasto, index) => (
+                {/* --- Nuevos Gastos Adicionales --- */}
+                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
+                    <p className="text-2xl font-bold tracking-wider mb-2 text-center">Añadir Gastos Adicionales</p>
+                    <p className="text-md text-center text-white/70 mb-4">(Estos gastos se añadirán a la lista y se restarán de la ganancia bruta)</p>
+                    {nuevosGastosAdicionales.map((gasto, index) => (
                         <div key={index} className="flex flex-col md:flex-row gap-4 mb-4 p-3 border border-white/10 rounded-md items-center">
                             <div className="flex-1 flex flex-col gap-2 w-full">
                                 <label htmlFor={`nombreGasto-${index}`} className="font-semibold tracking-wide">Nombre del Gasto:</label>
@@ -217,9 +283,9 @@ export default function Page() {
                                     autoComplete="off"
                                     className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full"
                                     type="text"
-                                    placeholder="Ej: Repuesto Llanta"
+                                    placeholder="Ej: Lavado Carro"
                                     value={gasto.nombre}
-                                    onChange={(e) => handleGastoAdicionalChange(index, e)}
+                                    onChange={(e) => handleNuevoGastoAdicionalChange(index, e)}
                                 />
                             </div>
                             <div className="flex-1 flex flex-col gap-2 w-full">
@@ -232,13 +298,13 @@ export default function Page() {
                                     type="number"
                                     placeholder="Ej: 15.000"
                                     value={gasto.cantidad}
-                                    onChange={(e) => handleGastoAdicionalChange(index, e)}
+                                    onChange={(e) => handleNuevoGastoAdicionalChange(index, e)}
                                 />
                             </div>
-                            {gastosAdicionales.length > 1 && (
+                            {nuevosGastosAdicionales.length > 1 && (
                                 <button 
                                     type="button" 
-                                    onClick={() => removeGastoAdicionalField(index)} 
+                                    onClick={() => removeNuevoGastoAdicionalField(index)} 
                                     className="bg-red-500 text-white p-2 rounded-md self-end md:self-center hover:bg-red-600 transition-colors duration-300 w-full md:w-auto"
                                 >
                                     Eliminar
@@ -248,7 +314,7 @@ export default function Page() {
                     ))}
                     <button 
                         type="button" 
-                        onClick={addGastoAdicionalField} 
+                        onClick={addNuevoGastoAdicionalField} 
                         className="bg-green-500 tracking-wider text-white font-semibold py-2 px-4 rounded-md w-full hover:bg-green-600 transition-colors duration-300 mt-2"
                     >
                         + Añadir Otro Gasto Extra
@@ -256,7 +322,7 @@ export default function Page() {
                 </div>
 
                 <button type="submit" className="bg-blue-500 tracking-wider text-white font-semibold py-2 px-4 rounded-md w-10/12 md:w-2/3 hover:bg-blue-600 transition-colors duration-300 mt-5">
-                    Registrar Gasto del Día
+                    Actualizar Registro del Día
                 </button>
             </form>
         </div>

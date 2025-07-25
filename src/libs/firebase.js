@@ -1,6 +1,7 @@
 // libs/firebase.js
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, setDoc, doc, getDocs, query, orderBy } from "firebase/firestore";
+// Importa FieldPath junto con las demás funciones de firestore
+import { getFirestore, collection, setDoc, getDoc, doc, getDocs, query, orderBy, FieldPath } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -18,7 +19,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Exportamos todo lo necesario
+// Exportamos todo lo necesario, incluyendo FieldPath
 export { 
     db, 
     auth,
@@ -27,5 +28,7 @@ export {
     query, 
     orderBy,
     doc, 
-    setDoc
+    setDoc,
+    getDoc,
+    FieldPath // <-- ¡Esta es la adición clave!
 };

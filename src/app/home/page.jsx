@@ -241,6 +241,8 @@ export default function ReportesPage() { // Renombré el componente para mayor c
                     )}
                 </div>
 
+                {/* racha */}
+
                 {/* Espacio para otras gráficas */}
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className='bg-white/10 h-64 rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold pt-4'>

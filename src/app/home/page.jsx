@@ -32,6 +32,7 @@ export default function ReportesPage() { // Renombré el componente para mayor c
     const [selectedVehiculoId, setSelectedVehiculoId] = useState("");
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); // Fecha actual por defecto
     const [dailyRecord, setDailyRecord] = useState(null); // Almacena el registro diario
+    const [weeklyRecords, setWeeklyRecords] = useState([]); // Registros de la semana
 
     // Opciones para la gráfica de barras
     const chartOptions = {
@@ -148,6 +149,35 @@ export default function ReportesPage() { // Renombré el componente para mayor c
         fetchDailyRecord();
     }, [fetchDailyRecord]);
 
+    // Obtener los registros de los últimos 7 días para el vehículo seleccionado
+    useEffect(() => {
+        const fetchWeeklyRecords = async () => {
+            if (!selectedVehiculoId) {
+                setWeeklyRecords([]);
+                return;
+            }
+            try {
+                const today = new Date(selectedDate);
+                const records = [];
+                for (let i = 6; i >= 0; i--) {
+                    const date = new Date(today);
+                    date.setDate(today.getDate() - i);
+                    const dateStr = date.toISOString().split('T')[0];
+                    const registroRef = doc(db, "Usuarios", "3157870130", "Vehiculos", selectedVehiculoId, "registros", dateStr);
+                    const docSnap = await getDoc(registroRef);
+                    records.push({
+                        fecha: dateStr,
+                        data: docSnap.exists() ? docSnap.data() : null
+                    });
+                }
+                setWeeklyRecords(records);
+            } catch (error) {
+                setWeeklyRecords([]);
+            }
+        };
+        fetchWeeklyRecords();
+    }, [selectedVehiculoId, selectedDate]);
+
     // Preparar los datos para Chart.js
     const chartData = {
         labels: [],
@@ -192,6 +222,20 @@ export default function ReportesPage() { // Renombré el componente para mayor c
         chartData.datasets[0].borderColor.push('rgba(54, 162, 235, 1)');
     }
 
+    // Preparar datos para la gráfica semanal
+    const weeklyChartData = {
+        labels: weeklyRecords.map(r => r.fecha.slice(5)), // Solo MM-DD
+        datasets: [
+            {
+                label: 'Ganancia Neta',
+                data: weeklyRecords.map(r => r.data?.gananciaNeta || 0),
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1,
+            }
+        ],
+    };
+
     return (
         <div className='mt-24'>
             <Navbar />
@@ -200,6 +244,7 @@ export default function ReportesPage() { // Renombré el componente para mayor c
 
                 {/* Selectores de Vehículo y Fecha */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 items-center justify-center bg-white/5 py-10 px-6 mx-auto w-full rounded-lg mb-8">
+                    {/* ...existing code... */}
                     <div className="flex flex-col gap-2 w-full px-4">
                         <label htmlFor="CarroReporte" className="font-semibold tracking-wide text-xl">Selecciona el Vehículo:</label>
                         <select 
@@ -231,7 +276,7 @@ export default function ReportesPage() { // Renombré el componente para mayor c
                 </div>
 
                 {/* Área de la gráfica diaria */}
-                <div className='bg-white/5 h-96 md:h-[500px] rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold p-4 flex flex-col items-center justify-center'>
+                <div className='bg-white/5 h-96 mb-8 md:h-[500px] rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold p-4 flex flex-col items-center justify-center'>
                     {dailyRecord ? (
                         <div className="w-full h-full">
                             <Bar options={chartOptions} data={chartData} />
@@ -241,14 +286,94 @@ export default function ReportesPage() { // Renombré el componente para mayor c
                     )}
                 </div>
 
-                {/* racha */}
+
+                {/* Gráfica Semanal */}
+                <div className='bg-white/5 h-auto md:h-[500px] rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold p-4 flex flex-col items-center justify-center mb-8 shadow-lg'>
+                    <p className="mb-4 text-2xl font-bold text-white/90">Gráfica Semanal</p>
+                    {weeklyRecords.length > 0 ? (
+                        <div className="w-full h-64 md:h-[320px] mb-6">
+                            <Bar options={{
+                                ...chartOptions,
+                                plugins: {
+                                    ...chartOptions.plugins,
+                                    title: {
+                                        display: true,
+                                        text: 'Ganancia Neta - Últimos 7 días',
+                                        color: '#fff',
+                                        font: { size: 18 }
+                                    },
+                                },
+                                scales: {
+                                    ...chartOptions.scales,
+                                    x: {
+                                        ...chartOptions.scales.x,
+                                        title: {
+                                            display: true,
+                                            text: 'Fecha',
+                                            color: '#fff',
+                                            font: { size: 14 }
+                                        }
+                                    },
+                                    y: {
+                                        ...chartOptions.scales.y,
+                                        title: {
+                                            display: true,
+                                            color: '#fff',
+                                            font: { size: 14 }
+                                        }
+                                    }
+                                }
+                            }} data={weeklyChartData} />
+                        </div>
+                    ) : (
+                        <p className="text-white/70 py-8">No hay datos semanales para mostrar.</p>
+                    )}
+
+                    {/* Resumen semanal mejorado */}
+                    {weeklyRecords.length > 0 && (
+                        <div className="w-full flex flex-col md:flex-row justify-center items-center gap-6 text-base md:text-xl">
+                            {(() => {
+                                const totalGenerado = weeklyRecords.reduce((acc, r) => acc + (r.data?.gananciaNeta || 0), 0);
+                                const totalGastos = weeklyRecords.reduce((acc, r) => {
+                                    let gastos = r.data?.gastoGasolina || 0;
+                                    if (r.data?.gastosAdicionales && Array.isArray(r.data.gastosAdicionales)) {
+                                        gastos += r.data.gastosAdicionales.reduce((sum, g) => sum + (g.cantidad || 0), 0);
+                                    }
+                                    return acc + gastos;
+                                }, 0);
+                                const totalBruto = weeklyRecords.reduce((acc, r) => {
+                                    const bruto = r.data?.gananciaBrutaDiaria || 0;
+                                    let gastos = r.data?.gastoGasolina || 0;
+                                    if (r.data?.gastosAdicionales && Array.isArray(r.data.gastosAdicionales)) {
+                                        gastos += r.data.gastosAdicionales.reduce((sum, g) => sum + (g.cantidad || 0), 0);
+                                    }
+                                    return acc + (bruto - gastos);
+                                }, 0);
+                                const formatCOP = v => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(v);
+                                return (
+                                    <>
+                                        <div className="flex-1 bg-gradient-to-br from-blue-500/80 to-blue-700/80 rounded-lg px-6 py-4 text-white shadow">
+                                            <span className="block font-bold text-lg mb-1">Total generado</span>
+                                            <span className="text-2xl font-mono">{formatCOP(totalGenerado)}</span>
+                                        </div>
+                                        <div className="flex-1 bg-gradient-to-br from-red-500/80 to-red-700/80 rounded-lg px-6 py-4 text-white shadow">
+                                            <span className="block font-bold text-lg mb-1">Total en gastos</span>
+                                            <span className="text-2xl font-mono">{formatCOP(totalGastos)}</span>
+                                        </div>
+                                        <div className="flex-1 bg-gradient-to-br from-green-500/80 to-green-700/80 rounded-lg px-6 py-4 text-white shadow">
+                                            <span className="block font-bold text-lg mb-1">Ganancia bruta semanal</span>
+                                            <span className="text-2xl font-mono">{formatCOP(totalBruto)}</span>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    )}
+                </div>
 
                 {/* Espacio para otras gráficas */}
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className='bg-white/10 h-64 rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold pt-4'>
-                        Gráfica Semanal (Próximamente)
-                    </div>
-
+                    {/* ...existing code... */}
                     <div className='bg-white/10 h-64 rounded-xl text-center text-xl md:text-2xl tracking-wider font-semibold pt-4'>
                         Gráfica Quincenal (Próximamente)
                     </div>

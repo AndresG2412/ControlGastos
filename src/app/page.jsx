@@ -1,119 +1,69 @@
-// pages/index.jsx
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { auth, db, collection, query, where, getDocs, limit } from "../libs/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import React from 'react';
 
-export default function Home() {
-    const [correo, setCorreo] = useState("");
-    const [contrasena, setContrasena] = useState("");
-    const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
+import { useState } from 'react';
+
+//llamado de la base de datos y autenticacion e inicio de seccion en firebase
+//createUserWithEmailAndPassword ya es una funcion, va en verificacion
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth"; 
+import { db } from "@/libs/firebase";
+
+//redireccionar a la pagina de inicio de seccion
+import { useRouter } from 'next/navigation';
+
+export default function Home() { //Read component of CRUD
+    
+    //redireccionar a la pagina de inicio de seccion
     const router = useRouter();
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setError("");
-        setLoading(true);
-        
-        try {
-            // 1. Autenticación con Firebase Auth
-            console.log("Iniciando autenticación...");
-            const userCredential = await signInWithEmailAndPassword(auth, correo, contrasena);
-            const user = userCredential.user;
-            
-            console.log("Autenticación exitosa. Datos del usuario:", {
-                uid: user.uid,
-                email: user.email,
-                emailVerified: user.emailVerified
-            });
+    const auth = getAuth();
 
-            // 2. Consulta a Firestore para verificar el usuario en la colección "Usuarios"
-            console.log("Iniciando consulta a Firestore en la colección 'Usuarios'...");
-            
-            // **Punto clave de depuración:**
-            // Asegúrate de que las reglas de seguridad de Firestore permitan la lectura
-            // de la colección "Usuarios" para usuarios autenticados.
-            // Por ejemplo, en tus reglas de Firestore, podrías tener algo como:
-            // match /Usuarios/{documentId} {
-            //   allow read: if request.auth != null;
-            // }
-            // O si es una base de datos de prueba, temporalmente:
-            // match /Usuarios/{documentId} {
-            //   allow read, write: if true;
-            // }
-            // Pero para producción, usa reglas más seguras.
+    const [data, setData] = useState({
+        correo: "",
+        contraseña: "",
+    });
+    const [showPassword, setShowPassword] = useState(false);
+    const [errorMsg, setErrorMsg] = useState("");
 
-            // **Otro punto clave de depuración:**
-            // Si la consulta falla con un error relacionado con "missing index" (índice faltante),
-            // necesitarás crear un índice compuesto en Firestore para la colección "Usuarios"
-            // en el campo "authUid". Firebase te proporcionará un enlace en el mensaje de error
-            // para crear este índice automáticamente.
-
-            const q = query(
-                collection(db, "Usuarios"),
-                where("authUid", "==", user.uid)
-            );
-            
-            const querySnapshot = await getDocs(q);
-            console.log(`Documentos encontrados en Firestore: ${querySnapshot.size}`);
-
-            if (querySnapshot.empty) {
-                // Esto ocurre si no se encuentra un documento en la colección "Usuarios"
-                // con el 'authUid' que coincida con el UID del usuario autenticado.
-                // Verifica que el 'authUid' en Firestore sea exactamente igual al UID de Firebase Auth.
-                const errorMsg = "No se encontró un perfil de usuario asociado en Firestore. Por favor, verifica la integridad de tus datos en la colección 'Usuarios'.";
-                console.error(errorMsg);
-                throw new Error(errorMsg);
-            }
-
-            // 3. Procesar resultados
-            const usuarioDoc = querySnapshot.docs[0];
-            const userData = usuarioDoc.data();
-            
-            console.log("Datos del documento de usuario encontrado en Firestore:", {
-                id: usuarioDoc.id,
-                ...userData
-            });
-
-            // 4. Almacenar el ID del documento y redirigir
-            localStorage.setItem("usuarioId", usuarioDoc.id);
-            console.log("Redirigiendo a /home...");
-            router.push("/home"); // Asegúrate de que esta ruta sea correcta en tu configuración de Next.js
-
-        } catch (error) {
-            console.error("Error completo durante el inicio de sesión:", {
-                code: error.code,
-                message: error.message,
-                stack: error.stack
-            });
-            
-            setError(translateError(error));
-        } finally {
-            setLoading(false);
-        }
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setData((prevData) => ({
+            ...prevData,
+            [name]: value,
+        }));
     };
 
-    // Traductor de errores de Firebase Auth
-    const translateError = (error) => {
-        const errorMap = {
-            'auth/invalid-email': 'Correo electrónico inválido. Por favor, verifica el formato.',
-            'auth/user-disabled': 'Tu cuenta ha sido deshabilitada. Contacta al soporte.',
-            'auth/user-not-found': 'Usuario no registrado. Verifica tu correo electrónico o regístrate.',
-            'auth/wrong-password': 'Contraseña incorrecta. Intenta de nuevo.',
-            'auth/too-many-requests': 'Demasiados intentos fallidos. Por favor, intenta de nuevo más tarde.',
-            'auth/network-request-failed': 'Error de conexión a la red. Verifica tu conexión a Internet.',
-            // Errores personalizados que podrías lanzar desde tu lógica
-            'No se encontró un perfil de usuario asociado en Firestore. Por favor, verifica la integridad de tus datos en la colección Usuarios.': 'Error interno: No se encontró el perfil de usuario en la base de datos.',
-        };
-        
-        return errorMap[error.code] || error.message || "Error desconocido al iniciar sesión. Por favor, intenta de nuevo.";
+    const verificacion = (e) => {
+        e.preventDefault(); // evita que recargue la página
+        setErrorMsg(""); // Limpiar error anterior
+        console.log('Datos del formulario:', data);
+
+        signInWithEmailAndPassword(auth, data.correo, data.contraseña)
+            .then((userCredential) => {
+                const user = userCredential.user;
+                console.log('Usuario autenticado:', user);
+                router.push("/home");
+                alert('Inicio de sesión exitoso');
+                // Aquí puedes redirigir al usuario a otra página o realizar otras acciones
+            })
+            .catch((error) => {
+                const errorCode = error.code;
+
+                if (errorCode === "auth/user-not-found") {
+                    setErrorMsg("El correo no está registrado.");
+                } else if (errorCode === "auth/wrong-password") {
+                    setErrorMsg("La contraseña es incorrecta.");
+                } else {
+                    setErrorMsg("Ocurrió un error. Intenta nuevamente.");
+                }
+
+                console.log(`Error ${errorCode}: ${error.message}`);
+            });
     };
 
     return (
-        <form className="flex flex-col items-center justify-center h-screen" onSubmit={handleLogin}>
+        <form className="flex flex-col items-center justify-center h-screen" onSubmit={verificacion}>
             <div className="my-auto flex flex-col gap-y-8 items-center justify-center bg-white/5 py-10 w-10/12 md:w-1/3 mx-auto rounded-lg">
                 <p className="text-3xl font-bold tracking-wider">Bienvenido</p>
 
@@ -121,15 +71,8 @@ export default function Home() {
                     <label htmlFor="Correo" className="font-semibold text-center tracking-wide text-xl">
                         Correo Electrónico
                     </label>
-                    <input
-                        id="Correo"
-                        autoComplete="email"
+                    <input name='correo' value={data.correo} onChange={handleChange} type="email" required
                         className="mx-auto outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-10/12 md:w-2/3"
-                        type="email"
-                        placeholder="Ejemplo@gmail.com"
-                        required
-                        value={correo}
-                        onChange={(e) => setCorreo(e.target.value)}
                     />
                 </div>
 
@@ -137,30 +80,38 @@ export default function Home() {
                     <label htmlFor="Contraseña" className="font-semibold text-center tracking-wide text-xl">
                         Contraseña
                     </label>
-                    <input
-                        id="Contraseña"
-                        autoComplete="current-password"
-                        className="mx-auto outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-10/12 md:w-2/3"
-                        type="password"
-                        placeholder="********"
-                        required
-                        value={contrasena}
-                        onChange={(e) => setContrasena(e.target.value)}
-                    />
+                    <div className='relative mx-auto w-10/12 md:w-2/3'>
+                        <input
+                            name='contraseña'
+                            value={data.contraseña}
+                            onChange={handleChange}
+                            type={showPassword ? "text" : "password"}
+                            required
+                            className="mx-auto outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-10 tracking-wider w-full"
+                            placeholder="Contraseña"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className='absolute right-2 top-1/2 transform -translate-y-1/2 transition-colors duration-200'
+                            style={{ color: showPassword ? '#737373' : '#FFFFFF' }}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
-                {error && (
-                    <p className="text-red-500 font-semibold text-center w-10/12 md:w-2/3">
-                        {error}
-                    </p>
+                {errorMsg && (
+                    <p className='text-red-400 text-center text-sm font-semibold'>{errorMsg}</p>
                 )}
 
                 <button
                     type="submit"
                     className="bg-blue-500 tracking-wider text-white font-semibold py-2 px-4 rounded-md w-10/12 md:w-2/3 hover:bg-blue-600 transition-colors duration-300 disabled:opacity-60"
-                    disabled={loading}
-                >
-                    {loading ? "Ingresando..." : "Iniciar Sesión"}
+                >Ingresar
                 </button>
             </div>
         </form>

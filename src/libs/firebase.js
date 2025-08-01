@@ -1,6 +1,6 @@
 // libs/firebase.js
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, collection, where, setDoc, getDoc, doc, getDocs, query, orderBy, FieldPath } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -20,17 +20,20 @@ const auth = getAuth(app);
 
 // Exportamos solo lo necesario
 export {
-  db,
-  auth,
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  doc,
-  setDoc,
-  getDoc,
-  FieldPath,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  where
+    // Firebase app
+    db,
+    auth,
+    // Firebase authentication functions
+    getAuth,
+    signInWithEmailAndPassword,
+    // Firestore functions
+    collection,
+    getDocs,
+    query,
+    orderBy,
+    doc,
+    setDoc,
+    getDoc,
+    FieldPath,
+    where
 };

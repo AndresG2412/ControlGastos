@@ -16,8 +16,7 @@ export default function Navbar() {
     return (
         <>
             <div className='h-1/12 w-full bg-[#111] shadow-1 fixed top-0 left-0 flex justify-between items-center border-b-[1px] border-[#fff] z-50 backdrop-blur-sm'>
-                <p className='hidden md:block pl-4 tracking-wide font-semibold text-xl'>Bienvenido, Example</p>
-                <p className='md:hidden block pl-4 tracking-wide font-semibold text-xl'>Bienvenido, <br />Example</p>
+                <p className='pl-4 tracking-wider font-bold text-xl'>GASTO$</p>
                 
                 {/* Botón hamburguesa*/}
                 <button 
@@ -113,7 +112,7 @@ export default function Navbar() {
                                 href="/resolver"
                                 onClick={closeMenu}
                             >
-                                Ingresar
+                                Cuentas
                             </Link>
                         </div>
                     </div>
@@ -137,6 +136,28 @@ export default function Navbar() {
                                 onClick={closeMenu}
                             >
                                 Editar
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* Item Registrar Carro */}
+                    <div 
+                        className={`group flex flex-col items-center space-y-4 transform transition-all duration-700 ease-out ${
+                        isMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'
+                        }`}
+                        style={{ transitionDelay: isMenuOpen ? '200ms' : '0ms' }}
+                    >
+                        <div className='flex items-center justify-center space-x-3'>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="group-hover:text-blue-400 group-hover:duration-300 transition-colors duration-300 size-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+
+                            <Link 
+                                className='uppercase text-white font-bold text-3xl tracking-widest group-hover:text-blue-400 group-hover:duration-300 transition-colors duration-300' 
+                                href="/register"
+                                onClick={closeMenu}
+                            >
+                                Carros
                             </Link>
                         </div>
                     </div>

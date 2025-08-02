@@ -28,11 +28,12 @@ export {
     signInWithEmailAndPassword,
     // Firestore functions
     collection,
+    doc,
     getDocs,
+    setDoc,
+    //extras
     query,
     orderBy,
-    doc,
-    setDoc,
     getDoc,
     FieldPath,
     where

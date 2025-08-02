@@ -9,30 +9,31 @@ import { collection, getDocs, getDoc, doc, addDoc, setDoc } from "firebase/fires
 import { db } from "@/libs/firebase";
 
 export default function Page() {
-  const router = useRouter();
+    const router = useRouter();
 
-  const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null);
-  const [vehiculo, setVehiculo] = useState([]);
-  const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [vehiculo, setVehiculo] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-  const [data, setData] = useState({
-    vehiculo: "",
-    ganancia: "",
-  });
+    const [data, setData] = useState({
+        vehiculo: "",
+        ganancia: "",
+    });
 
-  const [gastos, setGastos] = useState([{ nombre: "", monto: "" }]);
+    const [gastos, setGastos] = useState([{ nombre: "", monto: "" }]);
 
-  // 1️⃣ Obtener usuario
-  useEffect(() => {
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
+    // 1️⃣ Obtener usuario
+    useEffect(() => {
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
 
-    if (currentUser) {
-        setUser(currentUser);
+        if (currentUser) {
+            setUser(currentUser);
 
-        const userDocRef = doc(db, "users", currentUser.uid);
-        getDoc(userDocRef)
+            const userDocRef = doc(db, "users", currentUser.uid);
+            getDoc(userDocRef)
+            
             .then((userSnapshot) => {
                 if (userSnapshot.exists()) {
                     setUserData(userSnapshot.data());
@@ -50,22 +51,22 @@ export default function Page() {
     // 2️⃣ Obtener vehículos
     useEffect(() => {
         const obtenerVehiculos = async () => {
-        if (!user) return;
+            if (!user) return;
 
-        try {
-            const ref = collection(db, "users", user.uid, "Vehiculos");
-            const snapshot = await getDocs(ref);
-            const lista = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            }));
-            setVehiculo(lista);
-        } catch (e) {
-            console.error("Error al obtener vehículos:", e);
-            setVehiculo([]);
-        } finally {
-            setLoading(false);
-        }
+            try {
+                const ref = collection(db, "users", user.uid, "Vehiculos");
+                const snapshot = await getDocs(ref);
+                const lista = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+                }));
+                setVehiculo(lista);
+            } catch (e) {
+                console.error("Error al obtener vehículos:", e);
+                setVehiculo([]);
+            } finally {
+                setLoading(false);
+            }
         };
 
         obtenerVehiculos();
@@ -119,12 +120,13 @@ export default function Page() {
             }
 
             await setDoc(docRef, {
-                ganancia: Number(data.ganancia),
+                gananciaBruta: Number(data.ganancia),
                 gastos: gastos.map((g) => ({
                     nombre: g.nombre,
                     monto: Number(g.monto),
                 })),
                 fechaRegistro: new Date(),
+                gananciaNeta: Number(data.ganancia) - gastos.reduce((acc, g) => acc + Number(g.monto), 0),
             });
 
             console.log("Datos guardados en:", `users/${user.uid}/Vehiculos/${data.vehiculo}/registros/${fechaId}`);
@@ -153,24 +155,25 @@ export default function Page() {
             <p className="font-semibold tracking-wider text-lg">1. Selecciona el Vehículo</p>
                 {loading ? (
                     <p>Cargando vehículos...</p>
-                ) : vehiculo.length === 0 ? (
-                    <p>No hay vehículos registrados.</p>
-                ) : (
-                <select
-                    value={data.vehiculo}
-                    onChange={handleChange}
-                    name="vehiculo"
-                    className="w-full border p-2 rounded bg-white text-black"
-                    required
-                >
-                    <option value="">Selecciona un vehículo</option>
-                    {vehiculo.map((carro) => (
-                    <option key={carro.id} value={carro.placa}>
-                        {carro.placa} - {carro.marca} {carro.modelo}
-                    </option>
-                    ))}
-                </select>
-            )}
+                    ) : vehiculo.length === 0 ? (
+                        <p>No hay vehículos registrados.</p>
+                    ) : (
+                        <select
+                            value={data.vehiculo}
+                            onChange={handleChange}
+                            name="vehiculo"
+                            className="w-full border p-2 rounded bg-white text-black"
+                            required
+                        >
+                            <option value="">Selecciona un vehículo</option>
+                            {vehiculo.map((carro) => (
+                            <option key={carro.id} value={carro.placa}>
+                                {carro.placa} - {carro.marca} {carro.modelo}
+                            </option>
+                            ))}
+                        </select>
+                    )
+                }
 
         {/* Ganancia */}
         <div className="flex flex-col gap-2 mt-4">

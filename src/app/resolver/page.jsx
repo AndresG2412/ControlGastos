@@ -1,330 +1,248 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react"; // Agregamos useCallback
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
-import { db, collection, getDocs, doc, setDoc, getDoc } from "../../libs/firebase"; // Importamos getDoc
+
+import { getAuth } from "firebase/auth";
+import { collection, getDocs, getDoc, doc, addDoc, setDoc } from "firebase/firestore";
+import { db } from "@/libs/firebase";
 
 export default function Page() {
-    const [vehiculos, setVehiculos] = useState([]);
-    const [selectedVehiculoId, setSelectedVehiculoId] = useState("");
-    const [gananciaBrutaDiariaInput, setGananciaBrutaDiariaInput] = useState(""); // Input para la nueva ganancia
-    const [gastoGasolinaInput, setGastoGasolinaInput] = useState(""); // Input para el nuevo gasto de gasolina
-    const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const router = useRouter();
 
-    // Estados para los valores ACUMULADOS del día (lo que ya está en Firestore)
-    const [currentGananciaBruta, setCurrentGananciaBruta] = useState(0);
-    const [currentGastoGasolina, setCurrentGastoGasolina] = useState(0);
-    const [currentGastosAdicionales, setCurrentGastosAdicionales] = useState([]);
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [vehiculo, setVehiculo] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    // Estado para los NUEVOS gastos adicionales que se van a añadir en esta sesión
-    const [nuevosGastosAdicionales, setNuevosGastosAdicionales] = useState([
-        { nombre: "", cantidad: "" } // Un gasto adicional inicial vacío para nuevas entradas
-    ]);
+  const [data, setData] = useState({
+    vehiculo: "",
+    ganancia: "",
+  });
 
-    // ** 1. Obtener los vehículos del usuario **
-    useEffect(() => {
-        const obtenerVehiculos = async () => {
-            try {
-                const ref = collection(db, "Usuarios", "3157870130", "Vehiculos");
-                const snapshot = await getDocs(ref);
-                const lista = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setVehiculos(lista);
-                if (lista.length > 0) {
-                    setSelectedVehiculoId(lista[0].id); // Selecciona el primero por defecto
+  const [gastos, setGastos] = useState([{ nombre: "", monto: "" }]);
+
+  // 1️⃣ Obtener usuario
+  useEffect(() => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (currentUser) {
+        setUser(currentUser);
+
+        const userDocRef = doc(db, "users", currentUser.uid);
+        getDoc(userDocRef)
+            .then((userSnapshot) => {
+                if (userSnapshot.exists()) {
+                    setUserData(userSnapshot.data());
                 }
-            } catch (e) {
-                console.error("Error al obtener vehículos:", e);
-                setVehiculos([]);
-            }
-        };
-        obtenerVehiculos();
+            })
+            .catch((err) => {
+                console.error("Error al obtener datos del usuario", err);
+            });
+        } else {
+            alert("Tu sesión ha caducado. Por favor, inicia sesión nuevamente.");
+            router.push("/");
+        }
     }, []);
 
-    // ** 2. Función para cargar los datos del día seleccionado **
-    const cargarDatosDelDia = useCallback(async () => {
-        if (!selectedVehiculoId || !fecha) {
-            setCurrentGananciaBruta(0);
-            setCurrentGastoGasolina(0);
-            setCurrentGastosAdicionales([]);
-            return;
-        }
+    // 2️⃣ Obtener vehículos
+    useEffect(() => {
+        const obtenerVehiculos = async () => {
+        if (!user) return;
 
         try {
-            const registroRef = doc(db, 
-                "Usuarios", 
-                "3157870130", 
-                "Vehiculos", 
-                selectedVehiculoId, 
-                "registros", 
-                fecha 
-            );
-            const docSnap = await getDoc(registroRef);
-
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setCurrentGananciaBruta(data.gananciaBrutaDiaria || 0);
-                setCurrentGastoGasolina(data.gastoGasolina || 0);
-                setCurrentGastosAdicionales(data.gastosAdicionales || []);
-            } else {
-                // Si no hay datos para el día, inicializa a 0
-                setCurrentGananciaBruta(0);
-                setCurrentGastoGasolina(0);
-                setCurrentGastosAdicionales([]);
-            }
-        } catch (error) {
-            console.error("Error al cargar los datos del día:", error);
-            alert("Error al cargar los datos del día. Por favor, intenta de nuevo.");
-            setCurrentGananciaBruta(0);
-            setCurrentGastoGasolina(0);
-            setCurrentGastosAdicionales([]);
+            const ref = collection(db, "users", user.uid, "Vehiculos");
+            const snapshot = await getDocs(ref);
+            const lista = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            }));
+            setVehiculo(lista);
+        } catch (e) {
+            console.error("Error al obtener vehículos:", e);
+            setVehiculo([]);
+        } finally {
+            setLoading(false);
         }
-    }, [selectedVehiculoId, fecha]);
+        };
 
-    // Cargar datos cuando cambie el vehículo o la fecha
-    useEffect(() => {
-        cargarDatosDelDia();
-    }, [selectedVehiculoId, fecha, cargarDatosDelDia]);
+        obtenerVehiculos();
+    }, [user]);
 
-    // ** 3. Función para añadir un nuevo campo de gasto adicional (para esta sesión) **
-    const addNuevoGastoAdicionalField = () => {
-        setNuevosGastosAdicionales([...nuevosGastosAdicionales, { nombre: "", cantidad: "" }]);
+    // 3️⃣ Controladores
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setData((prev) => ({ ...prev, [name]: value }));
     };
 
-    // ** 4. Función para eliminar un campo de gasto adicional (de los nuevos a añadir) **
-    const removeNuevoGastoAdicionalField = (indexToRemove) => {
-        setNuevosGastosAdicionales(nuevosGastosAdicionales.filter((_, index) => index !== indexToRemove));
+    const handleGastoChange = (index, field, value) => {
+        const nuevosGastos = [...gastos];
+        nuevosGastos[index][field] = value;
+        setGastos(nuevosGastos);
     };
 
-    // ** 5. Función para manejar cambios en los campos de los nuevos gastos adicionales **
-    const handleNuevoGastoAdicionalChange = (index, event) => {
-        const { name, value } = event.target;
-        const list = [...nuevosGastosAdicionales];
-        list[index][name] = value;
-        setNuevosGastosAdicionales(list);
+    const agregarGasto = () => {
+        setGastos([...gastos, { nombre: "", monto: "" }]);
     };
 
-    // ** 6. Función para manejar el envío del formulario **
-    const handleSubmit = async (e) => {
+    const eliminarGasto = (index) => {
+        if (gastos.length === 1) return;
+        setGastos(gastos.filter((_, i) => i !== index));
+    };
+
+    // 4️⃣ Verificación y subida
+    const verificar = async (e) => {
         e.preventDefault();
 
-        if (!selectedVehiculoId) {
-            alert("Por favor, selecciona un vehículo.");
+        if (!data.vehiculo || !data.ganancia || gastos.some(g => !g.nombre || !g.monto)) {
+            alert("Por favor completa todos los campos correctamente.");
             return;
         }
-
-        const nuevaGananciaBruta = parseFloat(gananciaBrutaDiariaInput || 0);
-        const nuevoGastoCombustible = parseFloat(gastoGasolinaInput || 0);
-
-        if (isNaN(nuevaGananciaBruta) || isNaN(nuevoGastoCombustible)) {
-            alert("Por favor, ingresa valores numéricos válidos para Ganancia Diaria y Gasto de Gasolina.");
-            return;
-        }
-
-        // Obtener los datos actuales del día antes de actualizar (por si acaso han cambiado desde la carga inicial)
-        const registroRef = doc(db, 
-            "Usuarios", 
-            "3157870130", 
-            "Vehiculos", 
-            selectedVehiculoId, 
-            "registros", 
-            fecha 
-        );
-        const docSnap = await getDoc(registroRef);
-        let datosExistentes = docSnap.exists() ? docSnap.data() : {
-            gananciaBrutaDiaria: 0,
-            gastoGasolina: 0,
-            gastosAdicionales: []
-        };
-
-        // Suma los nuevos valores a los existentes
-        const totalGananciaBruta = datosExistentes.gananciaBrutaDiaria + nuevaGananciaBruta;
-        const totalGastoGasolina = datosExistentes.gastoGasolina + nuevoGastoCombustible;
-
-        // Filtra y añade los nuevos gastos adicionales válidos a la lista existente
-        const nuevosGastosValidos = nuevosGastosAdicionales.filter(gasto => 
-            gasto.cantidad && parseFloat(gasto.cantidad) > 0 && gasto.nombre 
-        ).map(gasto => ({
-            nombre: gasto.nombre,
-            cantidad: parseFloat(gasto.cantidad),
-            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
-        }));
-        
-        const todosLosGastosAdicionales = [...datosExistentes.gastosAdicionales, ...nuevosGastosValidos];
-
-        // Recalcular el total de gastos adicionales a partir de la lista completa
-        const totalGastosAdicionales = todosLosGastosAdicionales.reduce((sum, gasto) => sum + gasto.cantidad, 0);
-
-        // Calcula la ganancia neta con los totales acumulados
-        const gananciaNetaCalculada = totalGananciaBruta - totalGastoGasolina - totalGastosAdicionales;
-
-        const registroDiarioActualizado = {
-            gananciaBrutaDiaria: totalGananciaBruta,
-            gastoGasolina: totalGastoGasolina,
-            gastosAdicionales: todosLosGastosAdicionales,
-            totalGastosAdicionales: totalGastosAdicionales,
-            gananciaNeta: gananciaNetaCalculada,
-            fecha: fecha,
-            timestampRegistro: new Date() // Actualiza el timestamp del último registro
-        };
 
         try {
-            await setDoc(registroRef, registroDiarioActualizado, { merge: false }); // merge: false para sobreescribir con los nuevos totales
-                                                                                     // Si usáramos merge:true, tendríamos que ser muy cuidadosos con los arrays
-                                                                                     // y los incrementos atómicos para los números.
-                                                                                     // Es más seguro recalcular y sobreescribir el documento completo del día.
-            
-            alert("Registro diario actualizado con éxito!");
-            // Limpiar los campos de entrada y recargar los datos actuales
-            setGananciaBrutaDiariaInput("");
-            setGastoGasolinaInput("");
-            setNuevosGastosAdicionales([{ nombre: "", cantidad: "" }]); // Reinicia un campo vacío para nuevos gastos
-            cargarDatosDelDia(); // Recarga los datos para que el usuario vea los nuevos totales
+            const today = new Date();
+            const yyyy = today.getFullYear().toString().slice(2); // dos últimos dígitos
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const fechaId = `${yyyy}-${mm}-${dd}`;
+
+            // Ruta: users/{uid}/Vehiculos/{placa}/registros/{fecha}
+            const docRef = doc(db, "users", user.uid, "Vehiculos", data.vehiculo, "registros", fechaId);
+
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                alert("Ya has subido cuentas para este vehículo hoy.");
+                return;
+            }
+
+            await setDoc(docRef, {
+                ganancia: Number(data.ganancia),
+                gastos: gastos.map((g) => ({
+                    nombre: g.nombre,
+                    monto: Number(g.monto),
+                })),
+                fechaRegistro: new Date(),
+            });
+
+            console.log("Datos guardados en:", `users/${user.uid}/Vehiculos/${data.vehiculo}/registros/${fechaId}`);
+            alert("Cuentas subidas exitosamente.");
+
+            // Limpiar campos
+            setData({ vehiculo: "", ganancia: "" });
+            setGastos([{ nombre: "", monto: "" }]);
+
+            router.push("/home");
 
         } catch (error) {
-            console.error("Error al registrar/actualizar el gasto:", error);
-            alert("Error al registrar/actualizar el gasto. Por favor, intenta de nuevo.");
+            console.error("Error al subir los datos:", error);
+            alert("Ocurrió un error al subir los datos. Intenta de nuevo.");
         }
     };
 
-    return (
-        <div className='mt-24'>
-            <Navbar />
-            <form onSubmit={handleSubmit} className="w-10/12 gap-y-6 md:w-3/4 mx-auto flex flex-col items-center justify-center min-h-screen py-10">
-                <p className="text-3xl font-bold tracking-wider mb-8">Ingresar/Actualizar Gastos Diarios</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 items-center justify-center bg-white/5 py-10 px-6 mx-auto w-full rounded-lg">
-                    {/* Selector de Vehículo */}
-                    <div className="flex flex-col gap-2 w-full px-4">
-                        <label htmlFor="Carro" className="font-semibold tracking-wide text-xl">Selecciona el Vehículo:</label>
-                        <select 
-                            id="Carro" 
-                            autoComplete="off" 
-                            className="focus:bg-black outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full" 
-                            required
-                            value={selectedVehiculoId}
-                            onChange={(e) => setSelectedVehiculoId(e.target.value)}
-                        >
-                            <option value="">Selecciona...</option>
-                            {vehiculos.map((veh) => (
-                                <option key={veh.id} value={veh.id}>
-                                    {veh.nombre || veh.placa || veh.id}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+  return (
+    <div className="flex flex-col items-center justify-center mt-24">
+        <Navbar />
 
-                    {/* Campo de Fecha */}
-                    <div className="flex flex-col gap-2 w-full px-4">
-                        <label htmlFor="Fecha" className="font-semibold tracking-wide text-xl">Fecha:</label>
-                        <input
-                            id="Fecha"
-                            value={fecha}
-                            onChange={(e) => setFecha(e.target.value)}
-                            max={new Date().toISOString().split('T')[0]}
-                            autoComplete="off"
-                            className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full"
-                            type="date"
-                            required
-                        />
-                    </div>
-                </div>
+        <form onSubmit={verificar} className="bg-white/10 p-6 rounded w-10/12 md:w-full max-w-xl">
+            <h1 className="text-4xl font-bold mb-4 text-center">Registrar Cuentas</h1>
 
-                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
-                    <p className="text-2xl font-bold tracking-wider mb-4 text-center">Resumen del Día ({fecha})</p>
-                    <p className="text-xl text-white/80 mb-2">Ganancia Bruta Acumulada: **${currentGananciaBruta.toLocaleString('es-CO')}**</p>
-                    <p className="text-xl text-white/80 mb-2">Gasto Gasolina Acumulado: **${currentGastoGasolina.toLocaleString('es-CO')}**</p>
-                    <p className="text-xl text-white/80 mb-2">Total Gastos Adicionales: **${currentGastosAdicionales.reduce((sum, g) => sum + g.cantidad, 0).toLocaleString('es-CO')}**</p>
-                    <p className="text-2xl font-bold text-green-400 mt-4">Ganancia Neta Actual: **${(currentGananciaBruta - currentGastoGasolina - currentGastosAdicionales.reduce((sum, g) => sum + g.cantidad, 0)).toLocaleString('es-CO')}**</p>
-                </div>
-                
-                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
-                    <p className="text-2xl font-bold tracking-wider mb-4 text-center">Nuevos Ingresos/Gastos para Añadir</p>
-
-                    {/* Nueva Ganancia Diaria */}
-                    <div className="flex flex-col gap-2 w-full px-4 mb-5">
-                        <label htmlFor="Ganancia" className="font-semibold tracking-wide text-xl">Añadir Ganancia Bruta:</label>
-                        <input 
-                            id="Ganancia" 
-                            autoComplete="off" 
-                            className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full" 
-                            type="number" 
-                            placeholder="Ej: 50.000 (se sumará al total)" 
-                            value={gananciaBrutaDiariaInput}
-                            onChange={(e) => setGananciaBrutaDiariaInput(e.target.value)}
-                        />
-                    </div>
-
-                    {/* Nuevo Gasto de Gasolina Diaria */}
-                    <div className="flex flex-col gap-2 w-full px-4 mb-5">
-                        <label htmlFor="Gasolina" className="font-semibold tracking-wide text-xl">Añadir Gasto de Gasolina:</label>
-                        <input 
-                            id="Gasolina" 
-                            autoComplete="off" 
-                            className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full" 
-                            type="number" 
-                            placeholder="Ej: 10.000 (se sumará al total)" 
-                            value={gastoGasolinaInput}
-                            onChange={(e) => setGastoGasolinaInput(e.target.value)}
-                        />
-                    </div>
-                </div>
-                    
-                {/* --- Nuevos Gastos Adicionales --- */}
-                <div className="w-full bg-white/5 py-8 px-6 mx-auto rounded-lg mt-6">
-                    <p className="text-2xl font-bold tracking-wider mb-2 text-center">Añadir Gastos Adicionales</p>
-                    <p className="text-md text-center text-white/70 mb-4">(Estos gastos se añadirán a la lista y se restarán de la ganancia bruta)</p>
-                    {nuevosGastosAdicionales.map((gasto, index) => (
-                        <div key={index} className="flex flex-col md:flex-row gap-4 mb-4 p-3 border border-white/10 rounded-md items-center">
-                            <div className="flex-1 flex flex-col gap-2 w-full">
-                                <label htmlFor={`nombreGasto-${index}`} className="font-semibold tracking-wide">Nombre del Gasto:</label>
-                                <input
-                                    id={`nombreGasto-${index}`}
-                                    name="nombre"
-                                    autoComplete="off"
-                                    className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full"
-                                    type="text"
-                                    placeholder="Ej: Lavado Carro"
-                                    value={gasto.nombre}
-                                    onChange={(e) => handleNuevoGastoAdicionalChange(index, e)}
-                                />
-                            </div>
-                            <div className="flex-1 flex flex-col gap-2 w-full">
-                                <label htmlFor={`cantidadGasto-${index}`} className="font-semibold tracking-wide">Cantidad:</label>
-                                <input
-                                    id={`cantidadGasto-${index}`}
-                                    name="cantidad"
-                                    autoComplete="off"
-                                    className="outline-none focus:ring-blue-500 focus:border-blue-500 block dark:focus:ring-blue-500 dark:focus:border-blue-500 border-white border-2 rounded-md py-1.5 pl-2 pr-7 tracking-wider w-full"
-                                    type="number"
-                                    placeholder="Ej: 15.000"
-                                    value={gasto.cantidad}
-                                    onChange={(e) => handleNuevoGastoAdicionalChange(index, e)}
-                                />
-                            </div>
-                            {nuevosGastosAdicionales.length > 1 && (
-                                <button 
-                                    type="button" 
-                                    onClick={() => removeNuevoGastoAdicionalField(index)} 
-                                    className="bg-red-500 text-white p-2 rounded-md self-end md:self-center hover:bg-red-600 transition-colors duration-300 w-full md:w-auto"
-                                >
-                                    Eliminar
-                                </button>
-                            )}
-                        </div>
+            {/* Selección de vehículo */}
+            <p className="font-semibold tracking-wider text-lg">1. Selecciona el Vehículo</p>
+                {loading ? (
+                    <p>Cargando vehículos...</p>
+                ) : vehiculo.length === 0 ? (
+                    <p>No hay vehículos registrados.</p>
+                ) : (
+                <select
+                    value={data.vehiculo}
+                    onChange={handleChange}
+                    name="vehiculo"
+                    className="w-full border p-2 rounded bg-white text-black"
+                    required
+                >
+                    <option value="">Selecciona un vehículo</option>
+                    {vehiculo.map((carro) => (
+                    <option key={carro.id} value={carro.placa}>
+                        {carro.placa} - {carro.marca} {carro.modelo}
+                    </option>
                     ))}
-                    <button 
-                        type="button" 
-                        onClick={addNuevoGastoAdicionalField} 
-                        className="bg-green-500 tracking-wider text-white font-semibold py-2 px-4 rounded-md w-full hover:bg-green-600 transition-colors duration-300 mt-2"
+                </select>
+            )}
+
+        {/* Ganancia */}
+        <div className="flex flex-col gap-2 mt-4">
+            <label className="font-semibold tracking-wider text-lg">2. Ingresa la ganancia en BRUTO</label>
+            <input
+                name="ganancia"
+                value={data.ganancia}
+                onChange={handleChange}
+                type="number"
+                placeholder="90000"
+                className="border border-white text-white rounded pl-2 py-1"
+                required
+            />
+        </div>
+
+        {/* Lista de gastos */}
+        <div className="flex flex-col gap-2 mt-4">
+            <label className="font-semibold tracking-wider text-lg">
+                3. Ingresa los gastos uno por uno
+            </label>
+
+            {gastos.map((gasto, idx) => (
+                <div
+                    key={idx}
+                    className="flex flex-row items-center gap-2 w-full"
+                >
+                    <input
+                        type="text"
+                        placeholder="Gasolina"
+                        className="w-full flex-1 border border-white rounded pl-2 py-1"
+                        value={gasto.nombre}
+                        onChange={(e) => handleGastoChange(idx, "nombre", e.target.value)}
+                        required
+                    />
+                    <input
+                        type="number"
+                        placeholder="20000"
+                        className="w-full flex-1 border border-white rounded pl-2 py-1"
+                        value={gasto.monto}
+                        onChange={(e) => handleGastoChange(idx, "monto", e.target.value)}
+                        required
+                    />
+                    <button
+                        type="button"
+                        className="w-auto px-3 py-1 text-white bg-red-500 rounded"
+                        onClick={() => eliminarGasto(idx)}
+                        disabled={gastos.length === 1}
                     >
-                        + Añadir Otro Gasto Extra
+                        ✕
                     </button>
                 </div>
+            ))}
 
-                <button type="submit" className="bg-blue-500 tracking-wider text-white font-semibold py-2 px-4 rounded-md w-10/12 md:w-2/3 hover:bg-blue-600 transition-colors duration-300 mt-5">
-                    Actualizar Registro del Día
-                </button>
-            </form>
+
+            <button
+                type="button"
+                className="bg-blue-500 text-white px-2 py-1 rounded mt-2 w-fit"
+                onClick={agregarGasto}
+            >
+                + Agregar gasto
+            </button>
         </div>
-    );
+
+
+        {/* Submit */}
+        <button
+          type="submit"
+          className="bg-green-500 hover:bg-green-700 duration-300 transition-all text-white font-semibold tracking-wider text-lg px-4 py-2 rounded mt-4 w-full"
+        >
+          Subir Cuentas
+        </button>
+      </form>
+    </div>
+  );
 }

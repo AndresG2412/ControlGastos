@@ -104,7 +104,7 @@ export default function Page() {
 
         try {
             const today = new Date();
-            const yyyy = today.getFullYear().toString().slice(2); // dos últimos dígitos
+            const yyyy = today.getFullYear().toString().slice(); 
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
             const fechaId = `${yyyy}-${mm}-${dd}`;
@@ -144,108 +144,107 @@ export default function Page() {
         }
     };
 
-  return (
-    <div className="flex flex-col items-center justify-center mt-24">
-        <Navbar />
+    return (
+        <div className="flex flex-col items-center justify-center mt-24">
+            <Navbar />
 
-        <form onSubmit={verificar} className="bg-white/10 p-6 rounded w-10/12 md:w-full max-w-xl">
-            <h1 className="text-4xl font-bold mb-4 text-center">Registrar Cuentas</h1>
+            <form onSubmit={verificar} className="bg-white/10 p-6 rounded w-10/12 md:w-full max-w-xl">
+                <h1 className="text-4xl font-bold mb-4 text-center">Registrar Cuentas</h1>
 
-            {/* Selección de vehículo */}
-            <p className="font-semibold tracking-wider text-lg">1. Selecciona el Vehículo</p>
-                {loading ? (
-                    <p>Cargando vehículos...</p>
-                    ) : vehiculo.length === 0 ? (
-                        <p>No hay vehículos registrados.</p>
-                    ) : (
-                        <select
-                            value={data.vehiculo}
-                            onChange={handleChange}
-                            name="vehiculo"
-                            className="w-full border p-2 rounded bg-white text-black"
-                            required
-                        >
-                            <option value="">Selecciona un vehículo</option>
-                            {vehiculo.map((carro) => (
-                            <option key={carro.id} value={carro.placa}>
-                                {carro.placa} - {carro.marca} {carro.modelo}
-                            </option>
-                            ))}
-                        </select>
-                    )
-                }
+                {/* Selección de vehículo */}
+                <p className="font-semibold tracking-wider text-lg">1. Selecciona el Vehículo</p>
+                    {loading ? (
+                        <p>Cargando vehículos...</p>
+                        ) : vehiculo.length === 0 ? (
+                            <p>No hay vehículos registrados.</p>
+                        ) : (
+                            <select
+                                value={data.vehiculo}
+                                onChange={handleChange}
+                                name="vehiculo"
+                                className="w-full border p-2 rounded bg-white text-black"
+                                required
+                            >
+                                <option value="">Selecciona un vehículo</option>
+                                {vehiculo.map((carro) => (
+                                <option key={carro.id} value={carro.placa}>
+                                    {carro.placa} - {carro.marca} {carro.modelo}
+                                </option>
+                                ))}
+                            </select>
+                        )
+                    }
 
-        {/* Ganancia */}
-        <div className="flex flex-col gap-2 mt-4">
-            <label className="font-semibold tracking-wider text-lg">2. Ingresa la ganancia en BRUTO</label>
-            <input
-                name="ganancia"
-                value={data.ganancia}
-                onChange={handleChange}
-                type="number"
-                placeholder="90000"
-                className="border border-white text-white rounded pl-2 py-1"
-                required
-            />
-        </div>
-
-        {/* Lista de gastos */}
-        <div className="flex flex-col gap-2 mt-4">
-            <label className="font-semibold tracking-wider text-lg">
-                3. Ingresa los gastos uno por uno
-            </label>
-
-            {gastos.map((gasto, idx) => (
-                <div
-                    key={idx}
-                    className="flex flex-row items-center gap-2 w-full"
-                >
+                {/* Ganancia */}
+                <div className="flex flex-col gap-2 mt-4">
+                    <label className="font-semibold tracking-wider text-lg">2. Ingresa la ganancia en BRUTO</label>
                     <input
-                        type="text"
-                        placeholder="Gasolina"
-                        className="w-full flex-1 border border-white rounded pl-2 py-1"
-                        value={gasto.nombre}
-                        onChange={(e) => handleGastoChange(idx, "nombre", e.target.value)}
-                        required
-                    />
-                    <input
+                        name="ganancia"
+                        value={data.ganancia}
+                        onChange={handleChange}
                         type="number"
-                        placeholder="20000"
-                        className="w-full flex-1 border border-white rounded pl-2 py-1"
-                        value={gasto.monto}
-                        onChange={(e) => handleGastoChange(idx, "monto", e.target.value)}
+                        placeholder="90000"
+                        className="border border-white text-white rounded pl-2 py-1"
                         required
                     />
+                </div>
+
+                {/* Lista de gastos */}
+                <div className="flex flex-col gap-2 mt-4">
+                    <label className="font-semibold tracking-wider text-lg">
+                        3. Ingresa los gastos uno por uno
+                    </label>
+
+                    {gastos.map((gasto, idx) => (
+                        <div
+                            key={idx}
+                            className="flex flex-row items-center gap-2 w-full"
+                        >
+                            <input
+                                type="text"
+                                placeholder="Gasolina"
+                                className="w-full flex-1 border border-white rounded pl-2 py-1"
+                                value={gasto.nombre}
+                                onChange={(e) => handleGastoChange(idx, "nombre", e.target.value)}
+                                required
+                            />
+                            <input
+                                type="number"
+                                placeholder="20000"
+                                className="w-full flex-1 border border-white rounded pl-2 py-1"
+                                value={gasto.monto}
+                                onChange={(e) => handleGastoChange(idx, "monto", e.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="w-auto px-3 py-1 text-white bg-red-500 rounded"
+                                onClick={() => eliminarGasto(idx)}
+                                disabled={gastos.length === 1}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+
+
                     <button
                         type="button"
-                        className="w-auto px-3 py-1 text-white bg-red-500 rounded"
-                        onClick={() => eliminarGasto(idx)}
-                        disabled={gastos.length === 1}
+                        className="bg-blue-500 text-white px-2 py-1 rounded mt-2 w-fit"
+                        onClick={agregarGasto}
                     >
-                        ✕
+                        + Agregar gasto
                     </button>
                 </div>
-            ))}
 
 
-            <button
-                type="button"
-                className="bg-blue-500 text-white px-2 py-1 rounded mt-2 w-fit"
-                onClick={agregarGasto}
-            >
-                + Agregar gasto
-            </button>
+                {/* Submit */}
+                <button type="submit"
+                    className="bg-green-500 hover:bg-green-700 duration-300 transition-all text-white font-semibold tracking-wider text-lg px-4 py-2 rounded mt-4 w-full"
+                >
+                    Subir Cuentas
+                </button>
+            </form>
         </div>
-
-
-        {/* Submit */}
-        <button
-          type="submit"
-          className="bg-green-500 hover:bg-green-700 duration-300 transition-all text-white font-semibold tracking-wider text-lg px-4 py-2 rounded mt-4 w-full"
-        >
-          Subir Cuentas
-        </button>
-      </form>
-    </div>
-  );
+    );
 }

@@ -183,6 +183,8 @@ export default function Page() {
         }, 0);
     }, [registros]);
 
+    // tabla semanal
+
     return (
         <div className="mt-24 text-white px-4">
             <Navbar />
@@ -238,6 +240,8 @@ export default function Page() {
                     </p>
                 </div>
             )}
+
+            {/* tabla semanal */}
 
         </div>
     );

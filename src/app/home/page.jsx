@@ -33,7 +33,7 @@ export default function Page() {
     const [userData, setUserData] = useState(null);
     const [vehiculo, setVehiculo] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [data, setData] = useState({ vehiculo: "" });
+    const [data, setData] = useState({ vehiculo: "" , fecha: ""});
 
     const [registros, setRegistros] = useState([]);
 
@@ -87,22 +87,46 @@ export default function Page() {
     }, [user]);
 
     // 3️⃣ Cambios en select
-    const handleChange = async (e) => {
-        const { name, value } = e.target;
-        setData((prev) => ({ ...prev, [name]: value }));
+    const handleVehiculoChange = (e) => {
+        const { value } = e.target;
+        setData((prev) => ({ ...prev, vehiculo: value }));
+        setRegistros([]); // Limpiar registros si cambia el vehículo
+    };
 
-        if (user && value) {
-            const ref = collection(db, "users", user.uid, "Vehiculos", value, "registros");
-            const snapshot = await getDocs(ref);
-            const lista = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setRegistros(lista);
-        } else {
-            setRegistros([]);
+    const handleFechaChange = async (e) => {
+        const { value } = e.target;
+        setData((prev) => ({ ...prev, fecha: value }));
+
+        if (user && data.vehiculo && value) {
+            try {
+                const ref = doc(
+                    db,
+                    "users",
+                    user.uid,
+                    "Vehiculos",
+                    data.vehiculo,
+                    "registros",
+                    value
+                );
+
+                const snapshot = await getDoc(ref);
+
+                if (snapshot.exists()) {
+                    setRegistros([{
+                        id: snapshot.id,
+                        ...snapshot.data()
+                    }]);
+                } else {
+                    setRegistros([]);
+                }
+            } catch (err) {
+                console.error("Error al obtener registros:", err);
+                setRegistros([]);
+            }
         }
     };
+
+
 
     // 4️⃣ Preparar datos para Chart.js
     const chartData = {
@@ -126,10 +150,7 @@ export default function Page() {
             {
                 label: "Ganancia Neta",
                 backgroundColor: "#60A5FA",
-                data: registros.map((r) => {
-                    const gastos = r.gastos?.reduce((total, g) => total + Number(g.monto), 0) || 0;
-                    return (r.gananciaBruta || 0) - gastos;
-                }),
+                data: registros.map((r) => r.gananciaNeta || 0),
             },
         ],
     };
@@ -166,17 +187,18 @@ export default function Page() {
         <div className="mt-24 text-white px-4">
             <Navbar />
 
-            <div className="flex flex-col items-center justify-center w-full max-w-md mx-auto mb-6">
+            <div className="flex items-center justify-center w-full max-w-md mx-auto mb-6">
+                <p className="font-semibold tracking-wider text-xl mr-4">Carro: </p>
                 {loading ? (
                 <p>Cargando vehículos...</p>
                 ) : vehiculo.length === 0 ? (
-                <p>No hay vehículos registrados.</p>
+                    <p>No hay vehículos registrados.</p>
                 ) : (
                     <select
                         value={data.vehiculo}
-                        onChange={handleChange}
+                        onChange={handleVehiculoChange}
                         name="vehiculo"
-                        className="w-full border p-2 rounded bg-white text-black"
+                        className="w-64 border p-2 rounded bg-white text-black"
                         required
                     >
                         <option value="">Selecciona un vehículo</option>
@@ -189,13 +211,34 @@ export default function Page() {
                 )}
             </div>
 
+            <div className="flex items-center justify-center w-full max-w-md mx-auto mb-6">
+                <p className="font-semibold tracking-wider text-xl mr-4">Fecha: </p>
+                <input
+                    value={data.fecha}
+                    onChange={handleFechaChange}
+                    type="date"
+                    className="rounded p-1 w-64 text-black bg-white"
+                />            
+            </div>
+
+            {registros.length ? (
                 <div className="w-full max-w-4xl mx-auto mb-10 bg-white/10 rounded px-1 py-4 md:p-5">
-                    <p className="text-center text-3xl tracking-wider font-bold">Tabla Diaria</p>
+                    <p className="text-center text-3xl tracking-wider font-bold">Tabla Diaria {data.fecha}</p>
                     <Bar data={chartData} options={chartOptions} className="p-1 md:p-4"/>
-                    <p className="text-center text-lg font-semibold mt-4">
-                        Ganancia Neta Total: ${gananciaNetaTotal.toLocaleString()}
+                    <p className="text-center text-2xl font-semibold mt-4">
+                        Ganancia Neta: ${gananciaNetaTotal.toLocaleString()}
                     </p>
                 </div>
+            ) : (
+                <div className="w-full max-w-4xl mx-auto mb-10 bg-white/10 rounded px-1 py-4 md:p-5">
+                    <p className="text-center text-3xl tracking-wider font-bold">Tabla Diaria {data.fecha}</p>
+                    <Bar data={chartData} options={chartOptions} className="p-1 md:p-4"/>
+                    <p className="text-center text-2xl font-semibold mt-4">
+                        Ganancia Neta: ${gananciaNetaTotal.toLocaleString()}
+                    </p>
+                </div>
+            )}
+
         </div>
     );
 }

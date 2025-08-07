@@ -6,10 +6,13 @@ import Navbar from "../components/Navbar";
 
 import { getAuth } from "firebase/auth";
 import {
-  collection,
-  getDocs,
-  getDoc,
-  doc,
+    collection,
+    getDocs,
+    getDoc,
+    doc,
+    query,
+    where,
+    documentId, // Importamos para consultar por el ID del documento
 } from "firebase/firestore";
 import { db } from "@/libs/firebase";
 
@@ -33,10 +36,21 @@ export default function Page() {
     const [userData, setUserData] = useState(null);
     const [vehiculo, setVehiculo] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [data, setData] = useState({ vehiculo: "" , fecha: ""});
+    const [data, setData] = useState({ vehiculo: "" , fecha: "", mes: ""});
+    const [cajaInicial, setCajaInicial] = useState(0);
 
     const [registros, setRegistros] = useState([]);
 
+    const [mesSeleccionado, setMesSeleccionado] = useState(false);
+    
+    // Aquí guardaremos todos los registros del mes para la gráfica
+    const [registrosMensuales, setRegistrosMensuales] = useState([]);
+
+    // Nuevos estados para los totales mensuales
+    const [gananciaBrutaMensual, setGananciaBrutaMensual] = useState(0);
+    const [gastosMensual, setGastosMensual] = useState(0);
+    const [gananciaNetaMensual, setGananciaNetaMensual] = useState(0);
+    
     // 1️⃣ Obtener usuario
     useEffect(() => {
         const auth = getAuth();
@@ -126,9 +140,75 @@ export default function Page() {
         }
     };
 
+// Función actualizada para manejar el cambio de mes
+    const handleMesChange = async (e) => {
+        const { value } = e.target; // '2025-08'
+        setData((prev) => ({ ...prev, mes: value, fecha: "" })); // Limpiamos el día al seleccionar un mes
+        setMesSeleccionado(true);
 
+        if (user && data.vehiculo && value) {
+            try {
+                // 1. Obtenemos el año y mes del input
+                const [year, month] = value.split('-');
+                
+                // 2. Construimos las cadenas de inicio y fin para la consulta de rango
+                const primerDiaMes = `${year}-${month}-01`;
+                const ultimoDiaMes = `${year}-${month}-31`; // Usamos 31 como valor seguro
 
-    // 4️⃣ Preparar datos para Chart.js
+                // 3. Realizamos la consulta a Firestore para obtener todos los registros del mes
+                const registrosRef = collection(db, `users/${user.uid}/Vehiculos/${data.vehiculo}/registros`);
+                const q = query(
+                    registrosRef,
+                    where(documentId(), '>=', primerDiaMes),
+                    where(documentId(), '<=', ultimoDiaMes)
+                );
+                
+                const snapshot = await getDocs(q);
+                const listaRegistros = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+                setRegistrosMensuales(listaRegistros);
+
+                // 4. Obtenemos la caja inicial
+                const configRef = doc(db, `users/${user.uid}/Vehiculos/${data.vehiculo}/configuracion/datos`);
+                const configSnapshot = await getDoc(configRef);
+                const cajaInicialValue = configSnapshot.exists() ? configSnapshot.data().cajaInicial : 0;
+                setCajaInicial(cajaInicialValue);
+
+            } catch (err) {
+                console.error("Error al obtener registros mensuales:", err);
+                setRegistrosMensuales([]);
+                setMesSeleccionado(false);
+            }
+        }
+    };
+
+    // 5. useMemo para calcular los totales mensuales
+    useMemo(() => {
+        if (registrosMensuales.length > 0) {
+            let totalBruto = 0;
+            let totalGastos = 0;
+            let totalNeta = 0;
+
+            registrosMensuales.forEach(registro => {
+                totalBruto += registro.gananciaBruta || 0;
+                const gastosDelDia = registro.gastos?.reduce((sum, g) => sum + Number(g.monto), 0) || 0;
+                totalGastos += gastosDelDia;
+                totalNeta += (registro.gananciaBruta || 0) - gastosDelDia;
+            });
+
+            setGananciaBrutaMensual(totalBruto);
+            setGastosMensual(totalGastos);
+            setGananciaNetaMensual(totalNeta);
+        } else {
+            setGananciaBrutaMensual(0);
+            setGastosMensual(0);
+            setGananciaNetaMensual(0);
+        }
+    }, [registrosMensuales]);
+
+    // 4️⃣ Preparar datos para Chart.js tabla diaria
     const chartData = {
         labels: registros.map((registro) => {
             const nombresGastos = registro.gastos?.map((g) => g.nombre).join(", ") || "Sin gastos";
@@ -184,6 +264,58 @@ export default function Page() {
     }, [registros]);
 
     // tabla semanal
+
+    // 4️⃣ Preparar datos para Chart.js tabla diaria
+    // Nuevos datos para la gráfica mensual
+    const chartDataMes = {
+        labels: registrosMensuales.map(r => r.id),
+        datasets: [
+            {
+                label: "Ganancia Bruta",
+                backgroundColor: "#34D399",
+                data: registrosMensuales.map(r => r.gananciaBruta || 0),
+            },
+            {
+                label: "Total Gastos",
+                backgroundColor: "#F87171",
+                data: registrosMensuales.map(r => r.gastos?.reduce((total, g) => total + Number(g.monto), 0) || 0),
+            },
+            {
+                label: "Ganancia Neta",
+                backgroundColor: "#60A5FA",
+                data: registrosMensuales.map(r => r.gananciaNeta || 0),
+            },
+        ],
+    };
+
+    const chartOptionsMes = {
+        
+        responsive: true,
+        plugins: {
+            legend: { position: "top" },
+        },
+        scales: {
+            x: {
+            ticks: {
+                callback: function (val) {
+                // Devuelve el texto tal cual (respetando el salto de línea)
+                return this.getLabelForValue(val);
+                },
+                autoSkip: false,
+                maxRotation: 0,
+                minRotation: 0,
+            },
+            },
+        },
+    };
+
+    const gananciaNetaTotalMes = useMemo(() => {
+        return 0;
+    }, []);
+
+    const gastosTotalMes = useMemo(() => {
+        return 0;
+    }, []);
 
     return (
         <div className="mt-24 text-white px-4">
@@ -241,7 +373,40 @@ export default function Page() {
                 </div>
             )}
 
-            {/* tabla semanal */}
+            {/* Input de Mes y Año */}
+            <div className="flex items-center justify-center w-full max-w-md mx-auto mb-6">
+                <p className="font-semibold tracking-wider text-xl mr-4">Mes y Año: </p>
+                <input
+                    value={data.mes}
+                    onChange={handleMesChange}
+                    type="month"
+                    className="rounded p-1 w-64 text-black bg-white"
+                />
+            </div>
+            
+            {/* Sección de la gráfica mensual */}
+            {mesSeleccionado && registrosMensuales.length > 0 ? (
+                <div className="w-full max-w-4xl mx-auto mb-10 bg-white/10 rounded px-1 py-4 md:p-5">
+                    <p className="text-center text-3xl tracking-wider font-bold">Tabla Mensual {data.mes}</p>
+                    <Bar data={chartDataMes} options={chartOptionsMes} className="p-1 md:p-4"/>
+                    <p className="text-center text-2xl font-semibold mt-4">
+                        Ganancia Bruta: ${gananciaBrutaMensual.toLocaleString()}
+                    </p>
+                    <p className="text-center text-2xl font-semibold mt-4">
+                        Gastos Totales: ${gastosMensual.toLocaleString()}
+                    </p>
+                    <p className="text-center text-2xl font-semibold mt-4">
+                        Ganancia Neta: ${gananciaNetaMensual.toLocaleString()}
+                    </p>
+                    <p className="text-center text-3xl font-bold mt-4 text-green-400">
+                        Total General: ${(gananciaNetaMensual + cajaInicial).toLocaleString()}
+                    </p>
+                </div>
+            ) : mesSeleccionado && registrosMensuales.length === 0 ? (
+                <div className="w-full max-w-4xl mx-auto mb-10 bg-white/10 rounded px-1 py-4 md:p-5 text-center">
+                    <p className="text-xl">No hay registros para este mes.</p>
+                </div>
+            ) : null}
 
         </div>
     );

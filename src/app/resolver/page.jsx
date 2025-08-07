@@ -19,6 +19,7 @@ export default function Page() {
     const [data, setData] = useState({
         vehiculo: "",
         ganancia: "",
+        fecha: "",
     });
 
     const [gastos, setGastos] = useState([{ nombre: "", monto: "" }]);
@@ -97,7 +98,7 @@ export default function Page() {
     const verificar = async (e) => {
         e.preventDefault();
 
-        if (!data.vehiculo || !data.ganancia || gastos.some(g => !g.nombre || !g.monto)) {
+        if (!data.vehiculo || !data.fecha || !data.ganancia || gastos.some(g => !g.nombre || !g.monto)) {
             alert("Por favor completa todos los campos correctamente.");
             return;
         }
@@ -107,7 +108,7 @@ export default function Page() {
             const yyyy = today.getFullYear().toString().slice(); 
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
-            const fechaId = `${yyyy}-${mm}-${dd}`;
+            const fechaId = data.fecha
 
             // Ruta: users/{uid}/Vehiculos/{placa}/registros/{fecha}
             const docRef = doc(db, "users", user.uid, "Vehiculos", data.vehiculo, "registros", fechaId);
@@ -133,7 +134,7 @@ export default function Page() {
             alert("Cuentas subidas exitosamente.");
 
             // Limpiar campos
-            setData({ vehiculo: "", ganancia: "" });
+            setData({ vehiculo: "", ganancia: "", fecha: "" });
             setGastos([{ nombre: "", monto: "" }]);
 
             router.push("/home");
@@ -175,9 +176,22 @@ export default function Page() {
                         )
                     }
 
+                {/* fECHA */}
+                <div className="flex flex-col gap-2 mt-4">
+                    <label className="font-semibold tracking-wider text-lg">2. Ingresa la fecha del registro</label>
+                    <input
+                        name="fecha"
+                        value={data.fecha}
+                        onChange={handleChange}
+                        type="date"
+                        className="border border-white text-white rounded pl-2 py-1"
+                        required
+                    />
+                </div>
+
                 {/* Ganancia */}
                 <div className="flex flex-col gap-2 mt-4">
-                    <label className="font-semibold tracking-wider text-lg">2. Ingresa la ganancia en BRUTO</label>
+                    <label className="font-semibold tracking-wider text-lg">3. Ingresa la ganancia en BRUTO</label>
                     <input
                         name="ganancia"
                         value={data.ganancia}
@@ -192,7 +206,7 @@ export default function Page() {
                 {/* Lista de gastos */}
                 <div className="flex flex-col gap-2 mt-4">
                     <label className="font-semibold tracking-wider text-lg">
-                        3. Ingresa los gastos uno por uno
+                        4. Ingresa los gastos uno por uno
                     </label>
 
                     {gastos.map((gasto, idx) => (

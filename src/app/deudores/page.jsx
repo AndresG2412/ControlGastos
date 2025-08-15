@@ -1,5 +1,7 @@
 "use client";
 
+// mejorar la tabla y el tachado
+
 import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import { getAuth } from "firebase/auth";

@@ -1,5 +1,7 @@
 "use client";
 
+// hacer la tabla mensual una sola tabla
+
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";

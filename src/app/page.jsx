@@ -1,5 +1,7 @@
 "use client";
 
+// hacer en un componente la verificacion de login y el seleccionar vehiculo
+
 import React from 'react';
 
 import { useState } from 'react';
